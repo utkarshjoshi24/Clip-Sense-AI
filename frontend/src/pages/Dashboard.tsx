@@ -21,7 +21,7 @@ export function Dashboard() {
     refetchInterval: (data) => {
       // Poll every 3s while any video is in-progress
       const processing = data?.state.data?.videos?.some(
-        (v) => !["done", "failed"].includes(v.status)
+        (v) => !["done", "failed"].includes(v.status.toLowerCase())
       );
       return processing ? 3000 : false;
     },

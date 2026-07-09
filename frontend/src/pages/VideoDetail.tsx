@@ -28,7 +28,7 @@ export function VideoDetail() {
     queryKey: ["video", id],
     queryFn: () => videosApi.get(id!),
     refetchInterval: (data) => {
-      const status = data?.state.data?.status;
+      const status = data?.state.data?.status?.toLowerCase();
       return status && !["done", "failed"].includes(status) ? 3000 : false;
     },
     enabled: !!id,
@@ -37,7 +37,7 @@ export function VideoDetail() {
   const { data: clips = [] } = useQuery({
     queryKey: ["clips", id],
     queryFn: () => clipsApi.list(id!),
-    enabled: video?.status === "done",
+    enabled: video?.status?.toLowerCase() === "done",
   });
 
   const deleteMutation = useMutation({
@@ -88,17 +88,17 @@ export function VideoDetail() {
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
         {/* Status */}
-        {video.status !== "done" && (
-          <div className={`card flex items-center gap-3 ${video.status === "failed" ? "border-error/30" : "border-accent/20"}`}>
-            {video.status !== "failed" && (
+        {video.status?.toLowerCase() !== "done" && (
+          <div className={`card flex items-center gap-3 ${video.status?.toLowerCase() === "failed" ? "border-error/30" : "border-accent/20"}`}>
+            {video.status?.toLowerCase() !== "failed" && (
               <svg className="w-4 h-4 text-accent animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             )}
             <div>
-              <p className={`text-sm font-medium ${video.status === "failed" ? "text-error" : "text-text"}`}>
-                {STATUS_LABELS[video.status] || video.status}
+              <p className={`text-sm font-medium ${video.status?.toLowerCase() === "failed" ? "text-error" : "text-text"}`}>
+                {STATUS_LABELS[video.status?.toLowerCase()] || video.status}
               </p>
               {video.error_message && (
                 <p className="text-error text-xs mt-0.5">{video.error_message}</p>
@@ -108,7 +108,7 @@ export function VideoDetail() {
         )}
 
         {/* Clip list */}
-        {video.status === "done" && (
+        {video.status?.toLowerCase() === "done" && (
           <>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-text">
