@@ -11,4 +11,7 @@ export const clipsApi = {
 
   export: (req: ExportRequest): Promise<ExportResponse> =>
     api.post<ExportResponse>("/exports/", req).then((r) => r.data),
+
+  delete: (videoId: string, clipId: string): Promise<void> =>
+    api.delete(`/videos/${videoId}/clips/${clipId}`).then((r) => r.data),
 };

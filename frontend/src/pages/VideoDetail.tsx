@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { videosApi } from "../api/videos";
 import { clipsApi } from "../api/clips";
-import { VideoPlayer } from "../components/VideoPlayer";
 import { ClipCard } from "../components/ClipCard";
 import { ExportPanel } from "../components/ExportPanel";
 import type { Clip } from "../types";
@@ -22,7 +21,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function VideoDetail() {
   const { id } = useParams<{ id: string }>();
-  const [seekTo, setSeekTo] = useState<number | undefined>();
+  const queryClient = useQueryClient();
   const [selectedClips, setSelectedClips] = useState<Clip[]>([]);
 
   const { data: video, isLoading: vLoading } = useQuery({
@@ -41,12 +40,28 @@ export function VideoDetail() {
     enabled: video?.status === "done",
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (clipId: string) => clipsApi.delete(id!, clipId),
+    onSuccess: (_, clipId) => {
+      queryClient.setQueryData(["clips", id], (old: Clip[] | undefined) => 
+        old ? old.filter(c => c.id !== clipId) : []
+      );
+      setSelectedClips(prev => prev.filter(c => c.id !== clipId));
+    }
+  });
+
   const toggleClip = (clipId: string, sel: boolean) => {
     if (sel) {
       const clip = clips.find((c) => c.id === clipId);
       if (clip) setSelectedClips((prev) => [...prev, clip]);
     } else {
       setSelectedClips((prev) => prev.filter((c) => c.id !== clipId));
+    }
+  };
+
+  const handleDelete = (clipId: string) => {
+    if (window.confirm("Are you sure you want to delete this clip?")) {
+      deleteMutation.mutate(clipId);
     }
   };
 
@@ -72,11 +87,6 @@ export function VideoDetail() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Video Player */}
-        {video.preview_url && (
-          <VideoPlayer src={video.preview_url} seekTo={seekTo} className="max-h-80" />
-        )}
-
         {/* Status */}
         {video.status !== "done" && (
           <div className={`card flex items-center gap-3 ${video.status === "failed" ? "border-error/30" : "border-accent/20"}`}>
@@ -120,14 +130,15 @@ export function VideoDetail() {
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-5">
               {clips.map((clip) => (
                 <ClipCard
                   key={clip.id}
                   clip={clip}
+                  videoUrl={video.preview_url}
                   selected={selectedClips.some((c) => c.id === clip.id)}
                   onSelect={toggleClip}
-                  onSeek={setSeekTo}
+                  onDelete={handleDelete}
                 />
               ))}
             </div>

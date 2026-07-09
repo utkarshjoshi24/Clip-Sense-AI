@@ -68,3 +68,27 @@ async def get_clip(
         raise HTTPException(status_code=404, detail="Clip not found")
 
     return _clip_response(clip)
+
+
+@router.delete("/videos/{video_id}/clips/{clip_id}", status_code=204)
+async def delete_clip(
+    video_id: uuid.UUID,
+    clip_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    v_result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.user_id == current_user.id)
+    )
+    if not v_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    result = await db.execute(
+        select(Clip).where(Clip.id == clip_id, Clip.video_id == video_id)
+    )
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    await db.delete(clip)
+    await db.commit()
