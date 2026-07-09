@@ -69,6 +69,8 @@ def generate_presigned_url(key: str, expiry_seconds: int = 3600) -> str:
         Params={"Bucket": settings.STORAGE_BUCKET, "Key": key},
         ExpiresIn=expiry_seconds,
     )
+    if settings.APP_ENV == "development":
+        url = url.replace("http://minio:9000", "http://localhost:9000")
     return url
 
 
@@ -80,6 +82,8 @@ def generate_presigned_upload_url(key: str, expiry_seconds: int = 600) -> str:
         Params={"Bucket": settings.STORAGE_BUCKET, "Key": key},
         ExpiresIn=expiry_seconds,
     )
+    if settings.APP_ENV == "development":
+        url = url.replace("http://minio:9000", "http://localhost:9000")
     return url
 
 
