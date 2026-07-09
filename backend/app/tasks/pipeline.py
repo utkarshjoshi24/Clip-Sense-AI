@@ -254,6 +254,25 @@ def process_video(self: Task, video_id: str) -> dict:
                 
                 db.commit()
                 logger.info("[%s] Stage 4 complete: %d scene clips saved", video_id, len(highlights))
+
+                # ── Stage 5: Physically Cut Clips ───────────────────────────────
+                logger.info("[%s] Stage 5: Physically cutting %d clips...", video_id, len(highlights))
+                from ..services.export import cut_clips_batch
+                from ..models.clip import ExportStatus
+                
+                # We do this out of the main transaction to avoid long locks, but we need the DB updated
+                try:
+                    cut_clips_batch(video.storage_key, highlights)
+                    for clip in highlights:
+                        clip.export_status = ExportStatus.DONE
+                        clip.export_storage_key = f"exports/{clip.video_id}/{clip.id}.mp4"
+                    db.commit()
+                    logger.info("[%s] Stage 5 complete: clips physically cut and uploaded.", video_id)
+                except Exception as e:
+                    logger.exception("[%s] Stage 5 failed: %s", video_id, e)
+                    for clip in highlights:
+                        clip.export_status = ExportStatus.FAILED
+                    db.commit()
             else:
                 logger.info("[%s] Stage 4: Clips already in DB, skipping", video_id)
 

@@ -172,3 +172,43 @@ def cut_clip_ffmpeg(
                 out_path.unlink()
 
     return generate_presigned_url(output_key, expiry_seconds=3600)
+
+
+def cut_clips_batch(video_storage_key: str, clips: list[Clip]) -> None:
+    """Download video once, cut multiple clips, and upload them."""
+    if not clips:
+        return
+
+    with download_to_temp(video_storage_key, suffix=".mp4") as video_path:
+        for clip in clips:
+            output_key = f"exports/{clip.video_id}/{clip.id}.mp4"
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_out:
+                out_path = Path(tmp_out.name)
+
+            try:
+                duration = clip.end_time - clip.start_time
+                cmd = [
+                    "ffmpeg",
+                    "-ss", str(clip.start_time),
+                    "-i", str(video_path),
+                    "-t", str(duration),
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "22",
+                    "-c:a", "aac",
+                    "-avoid_negative_ts", "make_zero",
+                    "-y",
+                    str(out_path),
+                ]
+                result = subprocess.run(cmd, capture_output=True, timeout=600)
+                if result.returncode != 0:
+                    logger.error("ffmpeg failed for clip %s: %s", clip.id, result.stderr.decode()[:500])
+                    continue
+
+                with open(out_path, "rb") as f:
+                    upload_fileobj(f, output_key, content_type="video/mp4")
+
+                logger.info("Exported clip %s → %s", clip.id, output_key)
+            finally:
+                if out_path.exists():
+                    out_path.unlink()

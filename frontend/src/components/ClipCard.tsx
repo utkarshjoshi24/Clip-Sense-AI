@@ -81,10 +81,10 @@ export function ClipCard({ clip, videoUrl, selected, onSelect, onDelete }: ClipC
           </div>
 
           {/* Video Player */}
-          {videoUrl && (
+          {(clip.export_url || videoUrl) && (
             <div className="mt-3 mb-4 rounded-lg overflow-hidden bg-black/50 border border-white/5 relative shadow-inner">
               <video
-                src={`${videoUrl}#t=${clip.start_time},${clip.end_time}`}
+                src={clip.export_url || `${videoUrl}#t=${clip.start_time},${clip.end_time}`}
                 controls
                 controlsList="nodownload"
                 className="w-full h-auto max-h-64 object-contain"
