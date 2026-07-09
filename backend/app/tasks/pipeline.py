@@ -34,9 +34,13 @@ from ..services.storage import download_to_temp, compute_file_hash
 
 # ── Import the validated ML pipeline (DO NOT MODIFY these functions) ─────────
 # Add project root to path so highlight_detect is importable from the worker
-_project_root = Path(__file__).resolve().parents[4]
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+_current = Path(__file__).resolve()
+while _current.parent != _current:
+    if (_current / "highlight_detect").exists():
+        if str(_current) not in sys.path:
+            sys.path.insert(0, str(_current))
+        break
+    _current = _current.parent
 
 from highlight_detect.audio_energy import extract_audio, analyze_energy
 from highlight_detect.scene_detect import detect_scenes_full
