@@ -89,7 +89,7 @@ async def export_clips(
         if clip.export_storage_key:
             # Already exported — return existing presigned URL
             from ..services.storage import generate_presigned_url
-            urls.append(generate_presigned_url(clip.export_storage_key))
+            urls.append(generate_presigned_url(clip.export_storage_key, download_filename=f"highlight_{clip.rank}.mp4"))
         else:
             # Cut and upload (synchronous for now — move to Celery for large batches)
             try:

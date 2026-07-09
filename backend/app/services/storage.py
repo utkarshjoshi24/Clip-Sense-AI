@@ -46,6 +46,18 @@ def ensure_bucket_exists() -> None:
             logger.info("Created storage bucket: %s", settings.STORAGE_BUCKET)
         else:
             raise
+    
+    # Always ensure CORS is configured for browser playback
+    cors_configuration = {
+        'CORSRules': [{
+            'AllowedHeaders': ['*'],
+            'AllowedMethods': ['GET', 'PUT', 'POST', 'HEAD', 'DELETE'],
+            'AllowedOrigins': ['*'],
+            'ExposeHeaders': ['ETag', 'Accept-Ranges', 'Content-Encoding', 'Content-Length', 'Content-Range'],
+            'MaxAgeSeconds': 3600
+        }]
+    }
+    client.put_bucket_cors(Bucket=settings.STORAGE_BUCKET, CORSConfiguration=cors_configuration)
 
 
 def upload_fileobj(file_obj: io.IOBase, key: str, content_type: str = "video/mp4") -> str:
@@ -61,12 +73,16 @@ def upload_fileobj(file_obj: io.IOBase, key: str, content_type: str = "video/mp4
     return key
 
 
-def generate_presigned_url(key: str, expiry_seconds: int = 3600) -> str:
+def generate_presigned_url(key: str, expiry_seconds: int = 3600, download_filename: str | None = None) -> str:
     """Generate a presigned URL for client download (time-limited, no public bucket)."""
     client = _get_client()
+    params = {"Bucket": settings.STORAGE_BUCKET, "Key": key}
+    if download_filename:
+        params["ResponseContentDisposition"] = f'attachment; filename="{download_filename}"'
+
     url = client.generate_presigned_url(
         "get_object",
-        Params={"Bucket": settings.STORAGE_BUCKET, "Key": key},
+        Params=params,
         ExpiresIn=expiry_seconds,
     )
     if settings.APP_ENV == "development":
