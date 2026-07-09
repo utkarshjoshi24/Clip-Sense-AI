@@ -1,140 +1,100 @@
-# highlight-detect
+# ClipSense
 
-A standalone Python CLI tool that analyzes a long-form video file and outputs a ranked list of candidate highlight clips. Built for research and validation — run it against your own footage, watch the picks, tune the scoring weights, repeat.
+> AI-powered video highlight detection web application — wraps a validated Phase 0 ML pipeline in a production-grade FastAPI + React web app.
 
-## Prerequisites
+## Architecture
 
-- **Python 3.10+**
-- **ffmpeg** (must be installed separately and on your PATH)
-  ```bash
-  # macOS
-  brew install ffmpeg
+```
+frontend/  (React + Tailwind + Vite)
+backend/   (FastAPI + Celery + SQLAlchemy)
+highlight_detect/  (Phase 0 ML module — imported, NOT modified)
+infra/     (docker-compose, Dockerfiles, .env.example)
+```
 
-  # Ubuntu/Debian
-  sudo apt install ffmpeg
-
-  # Windows (with Chocolatey)
-  choco install ffmpeg
-  ```
-
-## Setup
+## Quick Start (Docker)
 
 ```bash
-# Clone or navigate to the project
-cd Clip-Sense
+# 1. Copy and configure environment
+cp infra/.env.example infra/.env
+# → edit infra/.env: set JWT_SECRET_KEY, Google OAuth keys, etc.
 
-# Create a virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate   # macOS/Linux
-# or: venv\Scripts\activate  # Windows
+# 2. Launch the full stack
+cd infra && docker compose up --build
 
-# Install dependencies
+# Services:
+#   API:        http://localhost:8000  (Swagger: http://localhost:8000/docs)
+#   Frontend:   http://localhost:5173
+#   MinIO UI:   http://localhost:9001  (user: minioadmin / minioadmin)
+```
+
+## Local Dev (without Docker)
+
+```bash
+# Backend
+cd backend
 pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Worker (separate terminal)
+celery -A app.tasks.celery_app:celery_app worker --loglevel=info
+
+# Frontend (separate terminal)
+cd frontend
+npm install && npm run dev
 ```
 
-> **Note**: The first run will download the Whisper model (~140 MB for "base"). This is a one-time download.
+## Environment Variables
 
-## Usage
+See [infra/.env.example](infra/.env.example) for all configurable variables.
 
-### Basic usage
-```bash
-python -m highlight_detect video.mp4
-```
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis URL for Celery broker |
+| `JWT_SECRET_KEY` | Secret key for JWT signing (generate: `openssl rand -hex 32`) |
+| `STORAGE_ENDPOINT` | MinIO/S3/R2 endpoint URL |
+| `STORAGE_ACCESS_KEY` | Storage access key |
+| `STORAGE_SECRET_KEY` | Storage secret key |
+| `EMAIL_MOCK` | Set `true` in dev to print emails to console |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (optional) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (optional) |
 
-### With options
-```bash
-python -m highlight_detect video.mp4 \
-  --min-clip-length 30 \
-  --max-clip-length 300 \
-  --top-n 5
-```
+## How highlight_detect Plugs Into the Web Layer
 
-### Export clips as separate mp4 files
-```bash
-python -m highlight_detect video.mp4 --export-clips --output-dir ./my_clips
-```
-
-### All options
-```
-python -m highlight_detect --help
-
-positional arguments:
-  video                 Path to the input video file (mp4/mov)
-
-options:
-  --min-clip-length N   Minimum clip length in seconds (default: 60)
-  --max-clip-length N   Maximum clip length in seconds (default: 600)
-  --top-n N             Number of candidate clips to return (default: 10)
-  --export-clips        Export each clip as a separate mp4 file
-  --output-dir DIR      Directory for output files (default: ./output)
-```
-
-## Output Columns Explained
-
-When the tool finishes, it prints a table like this:
-
-| Column | Meaning |
-|--------|---------|
-| **Rank** | Position in the ranked list (1 = best candidate) |
-| **Start** | Start timestamp of the candidate clip (HH:MM:SS) |
-| **End** | End timestamp of the candidate clip |
-| **Duration** | Length of the clip |
-| **Score** | Composite score (0–1) — weighted combination of the three sub-scores below |
-| **Audio** | Audio energy sub-score (0–1). High = loud/energetic moments (music hits, laughter, applause) |
-| **Scene** | Scene-boundary proximity sub-score (0–1). High = clip starts/ends near a natural cut point rather than mid-sentence |
-| **Lexical** | Transcript hook-word sub-score (0–1). High = speaker uses attention-grabbing language ("crazy", "the secret", etc.) |
-| **Transcript Preview** | First ~120 characters of what's being said in the clip, so you can quickly judge relevance |
-
-## How It Works
-
-The pipeline runs 4 stages:
-
-1. **Audio Energy** — Extracts audio, computes RMS energy curve, finds peaks (loud/energetic moments).
-2. **Scene Detection** — Uses PySceneDetect to find natural cut points in the video.
-3. **Transcription** — Runs Whisper to get timestamped text, then scores each segment for hook words and exclamatory language.
-4. **Scoring** — Slides windows across the video and scores each based on a weighted combination of audio energy, scene-boundary proximity, and lexical signal density. Deduplicates overlapping picks.
-
-## Tuning the Scoring
-
-All weights and thresholds live in [`highlight_detect/config.py`](highlight_detect/config.py). The key ones to tune:
+The Celery worker imports the Phase 0 ML functions **directly**:
 
 ```python
-# Composite score weights (must sum to 1.0)
-AUDIO_WEIGHT = 0.4      # How much to weight loud/energetic moments
-SCENE_WEIGHT = 0.3      # How much to reward natural cut points
-LEXICAL_WEIGHT = 0.3    # How much to reward hook-word-rich speech
-
-# Peak detection sensitivity
-PEAK_PROMINENCE = 0.3   # Lower = more peaks detected
-
-# Scene boundary proximity
-SCENE_PROXIMITY_SEC = 5.0  # How close (seconds) to a cut point to get credit
+# backend/app/tasks/pipeline.py
+from highlight_detect.audio_energy import extract_audio, analyze_energy
+from highlight_detect.scene_detect import detect_scenes_full
+from highlight_detect.transcribe import transcribe_audio, compute_lexical_signal
+from highlight_detect import scorer as scorer_module
 ```
 
-Hook words live in [`hook_words.txt`](hook_words.txt) — edit this file to add/remove phrases without touching code.
+The pipeline task:
+1. Downloads the uploaded video from S3/MinIO to a temp path
+2. Calls each ML function in sequence, updating `Video.status` after each stage
+3. Persists `SceneBoundary` rows (raw scene detection output) and `Clip` rows (scored highlights) to PostgreSQL
+4. Cleans up temp files on completion
 
-## Caching
+The ML logic is **never modified** — the web layer only wraps and orchestrates it.
 
-Intermediate results (audio extraction, energy curve, scene boundaries, transcript) are cached in `.highlight_cache/` keyed by your video file's identity. This means:
+## Plan Limits (enforced server-side)
 
-- **Re-running with different scoring weights** skips all the slow stages (especially Whisper transcription) and only re-computes the scoring. This is the fast-iteration loop.
-- **Running on a different video** computes everything from scratch.
-- **Delete `.highlight_cache/`** to force a full re-run.
+| Plan | Videos/month | Max duration | Max file size |
+|------|-------------|--------------|---------------|
+| Free | 3 | 15 min | 500 MB |
+| Pro  | Unlimited | 2 hours | 2 GB |
 
-## Project Structure
+## Running Tests
 
+```bash
+cd backend
+pytest tests/ -v
 ```
-Clip-Sense/
-├── highlight_detect/
-│   ├── __init__.py          # Package marker
-│   ├── __main__.py          # python -m entry point
-│   ├── cli.py               # Argument parsing + pipeline orchestration
-│   ├── config.py            # All tunable weights and thresholds
-│   ├── audio_energy.py      # Stage 1: Audio extraction + RMS energy
-│   ├── scene_detect.py      # Stage 2: Scene change detection
-│   ├── transcribe.py        # Stage 3: Whisper transcription + lexical signal
-│   └── scorer.py            # Stage 4: Sliding-window scoring + dedup
-├── hook_words.txt           # Editable hook-word list
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
-```
+
+## Export Formats
+
+- **MP4** — server-side ffmpeg trim, uploaded to storage, returns presigned download URLs
+- **EDL** — CMX 3600 format, importable into DaVinci Resolve and Premiere Pro
+- **FCPXML** — Final Cut Pro XML, importable into FCP and Premiere Pro
