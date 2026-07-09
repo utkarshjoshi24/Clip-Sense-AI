@@ -66,7 +66,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         email=body.email,
         hashed_password=auth_svc.hash_password(body.password),
         role=UserRole.FREE,
-        email_verified=False,
+        email_verified=True,  # Auto-verify for local testing
     )
     db.add(user)
     await db.flush()
