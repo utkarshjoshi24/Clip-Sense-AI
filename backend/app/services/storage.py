@@ -50,18 +50,7 @@ def ensure_bucket_exists() -> None:
             logger.info("Created storage bucket: %s", settings.STORAGE_BUCKET)
         else:
             raise
-    
-    # Always ensure CORS is configured for browser playback
-    cors_configuration = {
-        'CORSRules': [{
-            'AllowedHeaders': ['*'],
-            'AllowedMethods': ['GET', 'PUT', 'POST', 'HEAD', 'DELETE'],
-            'AllowedOrigins': ['*'],
-            'ExposeHeaders': ['ETag', 'Accept-Ranges', 'Content-Encoding', 'Content-Length', 'Content-Range'],
-            'MaxAgeSeconds': 3600
-        }]
-    }
-    client.put_bucket_cors(Bucket=settings.STORAGE_BUCKET, CORSConfiguration=cors_configuration)
+
 
 
 def upload_fileobj(file_obj: io.IOBase, key: str, content_type: str = "video/mp4") -> str:
