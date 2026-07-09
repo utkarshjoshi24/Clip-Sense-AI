@@ -24,10 +24,14 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
-def _get_client():
+def _get_client(presigned: bool = False):
+    endpoint_url = settings.STORAGE_ENDPOINT
+    if presigned and settings.APP_ENV == "development":
+        endpoint_url = endpoint_url.replace("http://minio:9000", "http://localhost:9000")
+
     return boto3.client(
         "s3",
-        endpoint_url=settings.STORAGE_ENDPOINT,
+        endpoint_url=endpoint_url,
         aws_access_key_id=settings.STORAGE_ACCESS_KEY,
         aws_secret_access_key=settings.STORAGE_SECRET_KEY,
         region_name=settings.STORAGE_REGION,
@@ -75,7 +79,7 @@ def upload_fileobj(file_obj: io.IOBase, key: str, content_type: str = "video/mp4
 
 def generate_presigned_url(key: str, expiry_seconds: int = 3600, download_filename: str | None = None) -> str:
     """Generate a presigned URL for client download (time-limited, no public bucket)."""
-    client = _get_client()
+    client = _get_client(presigned=True)
     params = {"Bucket": settings.STORAGE_BUCKET, "Key": key}
     if download_filename:
         params["ResponseContentDisposition"] = f'attachment; filename="{download_filename}"'
@@ -85,21 +89,17 @@ def generate_presigned_url(key: str, expiry_seconds: int = 3600, download_filena
         Params=params,
         ExpiresIn=expiry_seconds,
     )
-    if settings.APP_ENV == "development":
-        url = url.replace("http://minio:9000", "http://localhost:9000")
     return url
 
 
 def generate_presigned_upload_url(key: str, expiry_seconds: int = 600) -> str:
     """Generate a presigned PUT URL for direct-to-storage uploads."""
-    client = _get_client()
+    client = _get_client(presigned=True)
     url = client.generate_presigned_url(
         "put_object",
         Params={"Bucket": settings.STORAGE_BUCKET, "Key": key},
         ExpiresIn=expiry_seconds,
     )
-    if settings.APP_ENV == "development":
-        url = url.replace("http://minio:9000", "http://localhost:9000")
     return url
 
 
