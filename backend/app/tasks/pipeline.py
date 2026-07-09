@@ -193,51 +193,67 @@ def process_video(self: Task, video_id: str) -> dict:
             lexical_signal = compute_lexical_signal(transcript_segments)
             logger.info("[%s] Stage 3 complete: %d segments", video_id, len(transcript_segments))
 
-            # ── Stage 4: Composite Scoring ────────────────────────────────
+            # ── Stage 4: Exact Scene Scoring ────────────────────────────────
             _update_status(db, video_id, VideoStatus.SCORING)
 
             # Skip if clips already exist (idempotent)
             existing_clips = db.query(Clip).filter(Clip.video_id == video_id).count()
             if existing_clips == 0:
-                logger.info("[%s] Stage 4: Scoring windows", video_id)
-
+                logger.info("[%s] Stage 4: Scoring exact scenes", video_id)
                 video_duration = video.duration_seconds or 0
-                min_clip = settings.DEFAULT_MIN_CLIP_LENGTH
-                max_clip = min(settings.DEFAULT_MAX_CLIP_LENGTH, int(video_duration))
+                scene_boundaries.sort()
 
-                # Call the existing scorer functions as-is
-                scored = scorer_module.score_windows(
-                    energy_peaks=energy_peaks,
-                    scene_boundaries=scene_boundaries,
-                    lexical_signal=lexical_signal,
-                    video_duration=video_duration,
-                    min_clip_length=min_clip,
-                    max_clip_length=max_clip,
-                )
-                highlights = scorer_module.deduplicate_windows(
-                    scored, top_n=settings.DEFAULT_TOP_N
-                )
+                # Reconstruct exact scenes from boundaries
+                exact_scenes = []
+                for i in range(len(scene_boundaries) - 1):
+                    start = scene_boundaries[i]
+                    end = scene_boundaries[i+1]
+                    # Skip micro-scenes under 1 second
+                    if (end - start) >= 1.0:
+                        exact_scenes.append({"start": start, "end": end})
+                
+                # If no scenes were found (e.g. video is 1 shot), treat whole video as 1 scene
+                if not exact_scenes and video_duration > 0:
+                    exact_scenes.append({"start": 0.0, "end": video_duration})
+
+                from highlight_detect import config as ml_config
 
                 # Persist Clip rows
-                for rank, h in enumerate(highlights, 1):
-                    snippet = _get_transcript_snippet(
-                        transcript_segments, h["start"], h["end"]
+                highlights = []
+                for idx, scene in enumerate(exact_scenes, 1):
+                    start = scene["start"]
+                    end = scene["end"]
+
+                    # Compute sub-scores using existing ML logic
+                    a_score = scorer_module._audio_score_for_window(energy_peaks, start, end)
+                    l_score = scorer_module._lexical_score_for_window(lexical_signal, start, end)
+                    s_score = 1.0  # Perfect alignment with scene boundaries
+                    
+                    composite = (
+                        ml_config.AUDIO_WEIGHT * a_score
+                        + ml_config.SCENE_WEIGHT * s_score
+                        + ml_config.LEXICAL_WEIGHT * l_score
                     )
+
+                    snippet = _get_transcript_snippet(transcript_segments, start, end)
+                    
                     clip = Clip(
                         video_id=video_id,
-                        rank=rank,
-                        start_time=h["start"],
-                        end_time=h["end"],
-                        composite_score=h["score"],
-                        audio_energy_score=h["audio_score"],
-                        scene_boundary_score=h["scene_score"],
-                        transcript_signal_score=h["lexical_score"],
+                        rank=idx, # Chronological ordering
+                        start_time=round(start, 2),
+                        end_time=round(end, 2),
+                        composite_score=round(composite, 4),
+                        audio_energy_score=round(a_score, 4),
+                        scene_boundary_score=round(s_score, 4),
+                        transcript_signal_score=round(l_score, 4),
                         transcript_snippet=snippet,
                         title_suggestion=_suggest_title(snippet),
                     )
                     db.add(clip)
+                    highlights.append(clip)
+                
                 db.commit()
-                logger.info("[%s] Stage 4 complete: %d clips saved", video_id, len(highlights))
+                logger.info("[%s] Stage 4 complete: %d scene clips saved", video_id, len(highlights))
             else:
                 logger.info("[%s] Stage 4: Clips already in DB, skipping", video_id)
 
