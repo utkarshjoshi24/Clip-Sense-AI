@@ -21,7 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /install /usr/local
 
 # Create non-root user
-RUN useradd -m -u 1001 appuser
+RUN useradd -m -u 1001 appuser && \
+    mkdir -p /home/appuser/.cache/whisper && \
+    chown -R appuser:appuser /home/appuser
+
 WORKDIR /app
 
 # Copy application code
