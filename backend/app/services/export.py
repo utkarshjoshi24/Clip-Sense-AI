@@ -193,7 +193,7 @@ def cut_clips_batch(video_storage_key: str, clips: list[Clip]) -> None:
                     "-i", str(video_path),
                     "-t", str(duration),
                     "-c:v", "libx264",
-                    "-preset", "fast",
+                    "-preset", "ultrafast",
                     "-crf", "22",
                     "-c:a", "aac",
                     "-avoid_negative_ts", "make_zero",

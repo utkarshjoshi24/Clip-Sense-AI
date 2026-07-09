@@ -18,6 +18,7 @@ class VideoStatus(str, enum.Enum):
     DETECTING_SCENES = "detecting_scenes"
     TRANSCRIBING = "transcribing"
     SCORING = "scoring"
+    CUTTING_CLIPS = "cutting_clips"
     DONE = "done"
     FAILED = "failed"
 

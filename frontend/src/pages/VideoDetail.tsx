@@ -11,10 +11,11 @@ import type { Clip } from "../types";
 
 const STATUS_LABELS: Record<string, string> = {
   uploaded: "Queued for processing",
-  extracting_audio: "Stage 1/4 — Extracting audio...",
-  detecting_scenes: "Stage 2/4 — Detecting scenes...",
-  transcribing: "Stage 3/4 — Transcribing with Whisper...",
-  scoring: "Stage 4/4 — Scoring highlight windows...",
+  extracting_audio: "Stage 1/5 — Extracting audio...",
+  detecting_scenes: "Stage 2/5 — Detecting scenes...",
+  transcribing: "Stage 3/5 — Transcribing with Whisper...",
+  scoring: "Stage 4/5 — Scoring highlight windows...",
+  cutting_clips: "Stage 5/5 — Physically cutting scenes (this may take a minute)...",
   done: "Processing complete",
   failed: "Processing failed",
 };

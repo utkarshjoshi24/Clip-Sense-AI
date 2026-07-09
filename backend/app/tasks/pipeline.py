@@ -256,6 +256,7 @@ def process_video(self: Task, video_id: str) -> dict:
                 logger.info("[%s] Stage 4 complete: %d scene clips saved", video_id, len(highlights))
 
                 # ── Stage 5: Physically Cut Clips ───────────────────────────────
+                _update_status(db, video_id, VideoStatus.CUTTING_CLIPS)
                 logger.info("[%s] Stage 5: Physically cutting %d clips...", video_id, len(highlights))
                 from ..services.export import cut_clips_batch
                 from ..models.clip import ExportStatus
