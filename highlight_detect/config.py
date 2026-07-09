@@ -48,7 +48,7 @@ PEAK_DISTANCE = 10
 # ---------------------------------------------------------------------------
 
 # ContentDetector threshold — lower = more sensitive to scene changes
-SCENE_THRESHOLD = 27.0
+SCENE_THRESHOLD = 15.0
 
 # ---------------------------------------------------------------------------
 # Transcription (Stage 3)
