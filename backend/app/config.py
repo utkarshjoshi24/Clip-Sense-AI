@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
 
     # ── CORS ───────────────────────────────────────────────────────────────
-    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:4173", "http://127.0.0.1:5173", "http://127.0.0.1:4173"]
 
     # ── Plan Limits ────────────────────────────────────────────────────────
     FREE_MAX_VIDEOS_PER_MONTH: int = 3
