@@ -47,8 +47,12 @@ PEAK_DISTANCE = 10
 # Scene Detection (Stage 2)
 # ---------------------------------------------------------------------------
 
-# ContentDetector threshold — lower = more sensitive to scene changes
-SCENE_THRESHOLD = 0.1
+# AdaptiveDetector threshold — compares against a rolling average (default 3.0).
+# A higher value means fewer cuts (only the most distinct scenes).
+ADAPTIVE_SCENE_THRESHOLD = 3.0
+
+# Minimum length of a scene in frames. Prevents flashes from triggering rapid cuts.
+MIN_SCENE_LEN_FRAMES = 15
 
 # ---------------------------------------------------------------------------
 # Transcription (Stage 3) — faster-whisper (CTranslate2)

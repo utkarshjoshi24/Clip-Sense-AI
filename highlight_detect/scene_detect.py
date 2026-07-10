@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from scenedetect import open_video, SceneManager
-from scenedetect.detectors import ContentDetector
+from scenedetect.detectors import AdaptiveDetector
 
 from . import config
 from .error_handler import (
@@ -37,15 +37,14 @@ def _run_detection(video_path: str | Path, threshold: float | None = None):
 
     Args:
         video_path: Path to the source video file.
-        threshold: ContentDetector threshold. Lower = more sensitive to
-                   scene changes / camera angle shifts. If None, uses
-                   config.SCENE_THRESHOLD.
+        threshold: AdaptiveDetector threshold. If None, uses
+                   config.ADAPTIVE_SCENE_THRESHOLD.
 
     Returns:
         List of (start_timecode, end_timecode) tuples from PySceneDetect.
     """
     if threshold is None:
-        threshold = config.SCENE_THRESHOLD
+        threshold = config.ADAPTIVE_SCENE_THRESHOLD
 
     try:
         video = open_video(str(video_path))
@@ -74,7 +73,10 @@ def _run_detection(video_path: str | Path, threshold: float | None = None):
             )
 
     scene_manager = SceneManager()
-    scene_manager.add_detector(ContentDetector(threshold=threshold))
+    scene_manager.add_detector(AdaptiveDetector(
+        adaptive_threshold=threshold,
+        min_scene_len=config.MIN_SCENE_LEN_FRAMES,
+    ))
 
     # Detect scenes — this processes the entire video frame by frame
     try:
