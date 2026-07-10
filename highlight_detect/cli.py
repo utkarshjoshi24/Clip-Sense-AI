@@ -233,15 +233,15 @@ Examples:
     )
     parser.add_argument(
         "--min-clip-length",
-        type=int,
-        default=60,
-        help="Minimum clip length in seconds (default: 60).",
+        type=float,
+        default=60.0,
+        help="Minimum clip length in seconds (default: 60.0).",
     )
     parser.add_argument(
         "--max-clip-length",
-        type=int,
-        default=600,
-        help="Maximum clip length in seconds (default: 600).",
+        type=float,
+        default=600.0,
+        help="Maximum clip length in seconds (default: 600.0).",
     )
     parser.add_argument(
         "--top-n",
@@ -432,9 +432,9 @@ Examples:
 
         # Check if video is long enough for the requested clip length
         if video_duration < args.min_clip_length:
-            print(f"⚠  Video ({video_duration:.0f}s) is shorter than --min-clip-length "
-                  f"({args.min_clip_length}s). Adjusting min to {int(video_duration)}s.")
-            args.min_clip_length = max(1, int(video_duration))
+            print(f"⚠  Video ({video_duration:.1f}s) is shorter than --min-clip-length "
+                  f"({args.min_clip_length}s). Adjusting min to {video_duration:.1f}s.")
+            args.min_clip_length = max(0.1, float(video_duration))
 
         scored = score_windows(
             energy_peaks=energy_peaks,
@@ -442,7 +442,7 @@ Examples:
             lexical_signal=lexical_signal,
             video_duration=video_duration,
             min_clip_length=args.min_clip_length,
-            max_clip_length=min(args.max_clip_length, int(video_duration)),
+            max_clip_length=min(args.max_clip_length, float(video_duration)),
         )
 
         highlights = deduplicate_windows(scored, top_n=args.top_n)

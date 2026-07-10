@@ -89,8 +89,8 @@ def score_windows(
     scene_boundaries: list[float],
     lexical_signal: list[tuple[float, float, float]],
     video_duration: float,
-    min_clip_length: int,
-    max_clip_length: int,
+    min_clip_length: float,
+    max_clip_length: float,
 ) -> list[dict]:
     """Score all candidate highlight windows across the video.
 
@@ -113,8 +113,14 @@ def score_windows(
     length_step = config.CLIP_LENGTH_STEP_SEC
 
     # Generate clip lengths to test
-    clip_lengths = list(range(min_clip_length, max_clip_length + 1, length_step))
-    if max_clip_length not in clip_lengths:
+    clip_lengths = []
+    curr = min_clip_length
+    # Handle floating point inaccuracies
+    while curr <= max_clip_length + 1e-9:
+        clip_lengths.append(curr)
+        curr += length_step
+        
+    if not any(abs(l - max_clip_length) < 1e-9 for l in clip_lengths):
         clip_lengths.append(max_clip_length)
 
     total_windows = 0
