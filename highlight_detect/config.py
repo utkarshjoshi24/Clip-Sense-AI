@@ -19,10 +19,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HOOK_WORDS_FILE = PROJECT_ROOT / "hook_words.txt"
 
 # Cache directory for intermediate results (audio energy, transcript, scenes)
-CACHE_DIR = PROJECT_ROOT / ".highlight_cache"
+CACHE_DIR = Path.home() / ".highlight_cache"
 
 # Default output directory for results and exported clips
-OUTPUT_DIR = PROJECT_ROOT / "output"
+OUTPUT_DIR = Path.cwd() / "output"
 
 # ---------------------------------------------------------------------------
 # Audio Energy Analysis (Stage 1)
