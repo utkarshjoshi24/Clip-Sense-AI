@@ -188,38 +188,7 @@ def check_model_files() -> str | None:
     """
     logger = get_logger()
 
-    # Only validate in bundled mode
-    if not hasattr(sys, "_MEIPASS"):
-        logger.info("Model files check: running from source, skipping (auto-download on first use)")
-        return None
-
-    # In bundled mode, check for the model directory
-    bundle_dir = Path(sys._MEIPASS)
-    model_dir = bundle_dir / "faster_whisper_model"
-
-    if not model_dir.exists():
-        raise ModelCorruptError(
-            detail=f"Expected model directory not found at {model_dir}",
-        )
-
-    # Check for essential files
-    expected_files = ["model.bin", "config.json", "vocabulary.json"]
-    missing = [f for f in expected_files if not (model_dir / f).exists()]
-
-    if missing:
-        raise ModelCorruptError(
-            detail=f"Missing model files in {model_dir}: {missing}",
-        )
-
-    # Basic size check — model.bin should be at least 50MB for the 'base' model
-    model_bin = model_dir / "model.bin"
-    size_mb = model_bin.stat().st_size / (1024 * 1024)
-    if size_mb < 10:
-        raise ModelCorruptError(
-            detail=f"model.bin is suspiciously small: {size_mb:.1f} MB (expected >50 MB for 'base')",
-        )
-
-    logger.info("Model files check: OK (%s, %.0f MB)", model_dir, size_mb)
+    logger.info("Model files check: faster-whisper will auto-download models to ~/.cache on first use")
     return None
 
 
