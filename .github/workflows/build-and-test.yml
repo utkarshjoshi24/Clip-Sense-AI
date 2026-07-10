@@ -16,9 +16,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13      # Intel x86_64
+          - os: macos-15      # Cross-compile x86_64 (Intel runners deprecated)
             arch: x86_64
-            label: Intel
+            label: Intel (cross-build)
           - os: macos-14      # Apple Silicon arm64
             arch: arm64
             label: Apple Silicon
