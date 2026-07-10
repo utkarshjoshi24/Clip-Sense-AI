@@ -85,13 +85,21 @@ def _get_video_duration(video_path: Path) -> float:
 
 
 def _format_time(seconds: float) -> str:
-    """Format seconds as HH:MM:SS."""
+    """Format seconds as HH:MM:SS or MM:SS.s."""
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
+    s = seconds % 60
+    
+    # If it's a whole number, format as integer
+    if s % 1 == 0:
+        if h > 0:
+            return f"{h:02d}:{m:02d}:{int(s):02d}"
+        return f"{m:02d}:{int(s):02d}"
+        
+    # Include 1 decimal place for sub-second precision
     if h > 0:
-        return f"{h:02d}:{m:02d}:{s:02d}"
-    return f"{m:02d}:{s:02d}"
+        return f"{h:02d}:{m:02d}:{s:04.1f}"
+    return f"{m:02d}:{s:04.1f}"
 
 
 def _get_transcript_for_window(

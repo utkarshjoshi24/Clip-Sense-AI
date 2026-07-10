@@ -48,7 +48,7 @@ PEAK_DISTANCE = 10
 # ---------------------------------------------------------------------------
 
 # ContentDetector threshold — lower = more sensitive to scene changes
-SCENE_THRESHOLD = 10.0
+SCENE_THRESHOLD = 0.1
 
 # ---------------------------------------------------------------------------
 # Transcription (Stage 3) — faster-whisper (CTranslate2)
@@ -80,10 +80,10 @@ LEXICAL_WEIGHT = 0.3
 SCENE_PROXIMITY_SEC = 5.0
 
 # Sliding window step size in seconds
-SCORING_STEP_SEC = 15
+SCORING_STEP_SEC = 1
 
 # Clip length step — we test window sizes from min_clip to max_clip in these increments
-CLIP_LENGTH_STEP_SEC = 30
+CLIP_LENGTH_STEP_SEC = 2
 
 # Overlap threshold for deduplication — if two windows overlap by more than
 # this fraction of the shorter window's length, keep only the higher-scored one.
