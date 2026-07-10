@@ -1,6 +1,7 @@
 librosa>=0.10
 scipy
 numpy
-scenedetect[opencv]
+opencv-python-headless
+scenedetect
 faster-whisper>=1.0.0
 tabulate

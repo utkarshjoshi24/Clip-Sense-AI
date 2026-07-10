@@ -32,7 +32,8 @@ slowapi==0.1.9
 librosa==0.10.2
 scipy
 numpy
-scenedetect[opencv]
+opencv-python-headless
+scenedetect
 faster-whisper>=1.0.0
 
 # Dev/test
