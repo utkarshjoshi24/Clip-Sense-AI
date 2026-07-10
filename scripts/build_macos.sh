@@ -154,7 +154,7 @@ pyinstaller \
     --add-data "$PROJECT_ROOT/hook_words.txt:." \
     --target-arch "$ARCH" \
     --log-level WARN \
-    "$PROJECT_ROOT/highlight_detect/__main__.py"
+    "$PROJECT_ROOT/run.py"
 
 echo "  ✓ PyInstaller build complete."
 
