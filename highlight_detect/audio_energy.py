@@ -19,6 +19,12 @@ import numpy as np
 from scipy.signal import find_peaks, savgol_filter
 
 from . import config
+from .error_handler import (
+    FFmpegError,
+    PermissionDeniedError,
+    VideoFormatError,
+    get_logger,
+)
 
 
 def extract_audio(video_path: str | Path, cache_dir: Path) -> Path:
@@ -60,13 +66,41 @@ def extract_audio(video_path: str | Path, cache_dir: Path) -> Path:
             check=True,
         )
     except FileNotFoundError:
-        print("  ✗ ffmpeg not found. Please install ffmpeg and ensure it's on your PATH.")
-        print("    macOS: brew install ffmpeg")
-        print("    Ubuntu: sudo apt install ffmpeg")
-        sys.exit(1)
+        raise FFmpegError(
+            user_message=(
+                "❌ ffmpeg not found. Cannot extract audio from video.\n"
+                "   ClipSense requires ffmpeg for audio processing.\n"
+                "\n"
+                "   If you installed via .pkg, try reinstalling ClipSense.\n"
+                "   To install manually: brew install ffmpeg"
+            ),
+            detail="ffmpeg binary not found in PATH during audio extraction",
+        )
     except subprocess.CalledProcessError as e:
-        print(f"  ✗ ffmpeg failed: {e.stderr.decode()[:500]}")
-        sys.exit(1)
+        stderr = e.stderr.decode()[:500] if e.stderr else "unknown error"
+        logger = get_logger()
+        logger.error("ffmpeg audio extraction failed: %s", stderr)
+
+        if "Permission denied" in stderr or "Operation not permitted" in stderr:
+            raise PermissionDeniedError(
+                path=str(video_path),
+                operation="read",
+                detail=f"ffmpeg permission denied: {stderr}",
+            )
+        elif "Invalid data" in stderr or "does not contain" in stderr:
+            raise VideoFormatError(
+                video_path=str(video_path),
+                detail=f"ffmpeg audio extraction error: {stderr}",
+            )
+        else:
+            raise FFmpegError(
+                user_message=(
+                    f"❌ ffmpeg failed to extract audio from this video.\n"
+                    f"   The video may be corrupted or use an unsupported format.\n"
+                    f"   Error: {stderr[:200]}"
+                ),
+                detail=f"ffmpeg CalledProcessError: {stderr}",
+            )
 
     print(f"  ✓ Audio extracted → {output_path}")
     return output_path

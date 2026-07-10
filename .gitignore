@@ -30,3 +30,18 @@ Thumbs.db
 *.mov
 *.avi
 *.mkv
+
+# Build artifacts
+build/
+dist/
+*.pkg
+*.spec
+.build_venv_*/
+
+# Test fixtures
+test_fixtures/
+test_output/
+
+# Logs
+*.log
+

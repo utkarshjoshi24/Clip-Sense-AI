@@ -74,7 +74,7 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - whisper_cache:/home/appuser/.cache/whisper
+      - model_cache:/home/appuser/.cache/huggingface/hub
 
   # ── Celery Worker ─────────────────────────────────────────────────────────
   worker:
@@ -99,7 +99,7 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - whisper_cache:/home/appuser/.cache/whisper
+      - model_cache:/home/appuser/.cache/huggingface/hub
       - /tmp/clipsense:/tmp/clipsense
 
   # ── React Frontend (dev server) ───────────────────────────────────────────
@@ -117,4 +117,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  whisper_cache:
+  model_cache:

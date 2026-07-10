@@ -23,6 +23,13 @@ from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 
 from . import config
+from .error_handler import (
+    ClipSenseError,
+    FFmpegError,
+    PermissionDeniedError,
+    VideoFormatError,
+    get_logger,
+)
 
 
 def _run_detection(video_path: str | Path, threshold: float | None = None):
@@ -40,12 +47,50 @@ def _run_detection(video_path: str | Path, threshold: float | None = None):
     if threshold is None:
         threshold = config.SCENE_THRESHOLD
 
-    video = open_video(str(video_path))
+    try:
+        video = open_video(str(video_path))
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "permission" in error_msg or "access" in error_msg:
+            raise PermissionDeniedError(
+                path=str(video_path),
+                operation="read",
+                detail=f"PySceneDetect/OpenCV could not open video: {e}",
+            )
+        elif "codec" in error_msg or "decode" in error_msg or "invalid" in error_msg:
+            raise VideoFormatError(
+                video_path=str(video_path),
+                detail=f"PySceneDetect/OpenCV error: {e}",
+            )
+        else:
+            raise ClipSenseError(
+                user_message=(
+                    f"\u274c Could not open video for scene detection.\n"
+                    f"   File: {Path(video_path).name}\n"
+                    f"   Error: {e}\n"
+                    f"   The video may be corrupted or use an unsupported codec."
+                ),
+                technical_detail=f"open_video failed: {e}",
+            )
+
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector(threshold=threshold))
 
     # Detect scenes — this processes the entire video frame by frame
-    scene_manager.detect_scenes(video, show_progress=True)
+    try:
+        scene_manager.detect_scenes(video, show_progress=True)
+    except Exception as e:
+        logger = get_logger()
+        logger.error("Scene detection failed: %s", e, exc_info=True)
+        raise ClipSenseError(
+            user_message=(
+                f"\u274c Scene detection failed while processing the video.\n"
+                f"   This may be caused by a corrupted video file or\n"
+                f"   an unsupported codec. Error: {e}"
+            ),
+            technical_detail=f"detect_scenes failed: {e}",
+        )
+
     return scene_manager.get_scene_list()
 
 
@@ -236,12 +281,25 @@ def export_all_scenes(
                 stderr=subprocess.PIPE,
                 check=True,
             )
-            print(f"✓ {output_file.name}")
+            print(f"\u2713 {output_file.name}")
         except FileNotFoundError:
-            print("\n  ✗ ffmpeg not found. Please install ffmpeg.")
-            sys.exit(1)
+            raise FFmpegError(
+                user_message=(
+                    "\u274c ffmpeg not found. Cannot export scenes.\n"
+                    "   Install ffmpeg: brew install ffmpeg\n"
+                    "   Or reinstall ClipSense to restore the bundled ffmpeg."
+                ),
+                detail="ffmpeg binary not found during scene export",
+            )
         except subprocess.CalledProcessError as e:
-            print(f"✗ FAILED")
-            print(f"    Error: {e.stderr.decode()[:200]}")
+            stderr_text = e.stderr.decode()[:200] if e.stderr else "unknown"
+            if "Permission denied" in stderr_text:
+                raise PermissionDeniedError(
+                    path=str(output_file),
+                    operation="write",
+                    detail=f"ffmpeg scene export permission denied: {stderr_text}",
+                )
+            print(f"\u2717 FAILED")
+            print(f"    Error: {stderr_text}")
 
-    print(f"\n✅ All {total} scenes exported to {output_dir}/")
+    print(f"\n\u2705 All {total} scenes exported to {output_dir}/")

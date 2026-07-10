@@ -187,7 +187,7 @@ def process_video(self: Task, video_id: str) -> dict:
 
             # ── Stage 3: Transcription + Lexical Signal ───────────────────
             _update_status(db, video_id, VideoStatus.TRANSCRIBING)
-            logger.info("[%s] Stage 3: Whisper transcription", video_id)
+            logger.info("[%s] Stage 3: faster-whisper transcription", video_id)
 
             transcript_segments = transcribe_audio(str(audio_path), cache_key, cache_dir)
             lexical_signal = compute_lexical_signal(transcript_segments)

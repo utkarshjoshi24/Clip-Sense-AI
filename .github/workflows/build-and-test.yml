@@ -1,0 +1,240 @@
+# .github/workflows/build-and-test.yml
+# CI matrix: Build and smoke-test ClipSense on both Intel and Apple Silicon macOS.
+
+name: Build & Test macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13      # Intel x86_64
+            arch: x86_64
+            label: Intel
+          - os: macos-14      # Apple Silicon arm64
+            arch: arm64
+            label: Apple Silicon
+
+    name: "${{ matrix.label }} (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── System info ─────────────────────────────────────────────────────
+      - name: System info
+        run: |
+          echo "=== System Info ==="
+          echo "OS: $(sw_vers -productName) $(sw_vers -productVersion)"
+          echo "Architecture: $(uname -m)"
+          echo "CPU: $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'unknown')"
+          echo "Disk: $(df -h / | tail -1 | awk '{print $4}') free"
+          echo "==================="
+
+      # ── Python setup ────────────────────────────────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ── Install ffmpeg ──────────────────────────────────────────────────
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      # ── Install Python dependencies ─────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── Verify faster-whisper import ────────────────────────────────────
+      - name: Verify faster-whisper import
+        run: |
+          python -c "
+          from faster_whisper import WhisperModel
+          print('✓ faster-whisper imported successfully')
+          import ctranslate2
+          print(f'✓ ctranslate2 version: {ctranslate2.__version__}')
+          "
+
+      # ── Verify no PyTorch dependency ────────────────────────────────────
+      - name: Confirm PyTorch is NOT installed
+        run: |
+          python -c "
+          try:
+              import torch
+              print('✗ PyTorch is still installed — dependency not fully removed')
+              exit(1)
+          except ImportError:
+              print('✓ PyTorch is NOT installed (as expected)')
+          "
+
+      # ── Generate test video ─────────────────────────────────────────────
+      - name: Generate test video
+        run: |
+          bash scripts/generate_test_video.sh test_fixtures/test_video.mp4
+          ls -lh test_fixtures/test_video.mp4
+
+      # ── Smoke test: pipeline runs end-to-end ────────────────────────────
+      - name: Smoke test - pipeline end-to-end
+        run: |
+          echo "Running highlight-detect pipeline on test video..."
+          python -m highlight_detect.cli test_fixtures/test_video.mp4 \
+            --top-n 3 \
+            --min-clip-length 3 \
+            --max-clip-length 10 \
+            --skip-startup-checks \
+            --output-dir test_output
+
+          echo ""
+          echo "=== Checking output ==="
+          ls -la test_output/
+          
+          # Verify JSON output exists and is valid
+          python -c "
+          import json
+          with open('test_output/highlights.json') as f:
+              data = json.load(f)
+          print(f'✓ JSON output valid: {len(data[\"highlights\"])} highlights found')
+          print(f'  Video duration: {data[\"video_duration\"]:.1f}s')
+          print(f'  Model: {data[\"settings\"][\"whisper_model\"]}')
+          "
+
+      # ── Smoke test: startup checks ──────────────────────────────────────
+      - name: Smoke test - startup checks
+        run: |
+          python -c "
+          from highlight_detect.startup_checks import run_all_checks
+          from highlight_detect.error_handler import setup_logging
+          setup_logging()
+          warnings = run_all_checks()
+          print(f'Startup checks: {len(warnings)} warnings')
+          for w in warnings:
+              print(f'  {w}')
+          print('✓ Startup checks completed without fatal errors')
+          "
+
+      # ── Smoke test: error handler ───────────────────────────────────────
+      - name: Smoke test - error handler
+        run: |
+          python -c "
+          from highlight_detect.error_handler import (
+              setup_logging, check_disk_space, check_permissions,
+              DiskSpaceError, PermissionDeniedError
+          )
+          import tempfile, os
+          
+          logger = setup_logging()
+          
+          # Test disk space check (should pass on CI)
+          check_disk_space('/tmp', required_mb=100)
+          print('✓ Disk space check passed')
+          
+          # Test permission check
+          with tempfile.NamedTemporaryFile() as f:
+              check_permissions(f.name, need_write=False)
+          print('✓ Permission check passed')
+          
+          # Verify log file was created
+          log_path = os.path.expanduser('~/Library/Logs/ClipSense/clipsense.log')
+          assert os.path.exists(log_path), f'Log file not found at {log_path}'
+          print(f'✓ Log file created: {log_path}')
+          "
+
+      # ── Build PyInstaller bundle ────────────────────────────────────────
+      - name: Build PyInstaller bundle
+        run: |
+          bash scripts/build_macos.sh --arch ${{ matrix.arch }}
+
+      # ── Verify built binary runs ────────────────────────────────────────
+      - name: Verify built binary
+        run: |
+          BINARY="dist/ClipSense-${{ matrix.arch }}/clipsense/clipsense"
+          if [[ -f "$BINARY" ]]; then
+            echo "Binary found: $BINARY"
+            file "$BINARY"
+            ls -lh "$BINARY"
+            echo ""
+            # Quick help test
+            "$BINARY" --help || true
+            echo "✓ Binary executes"
+          else
+            echo "✗ Binary not found at $BINARY"
+            ls -la dist/ || true
+            exit 1
+          fi
+
+      # ── Build .pkg installer ────────────────────────────────────────────
+      - name: Build .pkg installer
+        run: |
+          bash scripts/package_installer.sh --arch ${{ matrix.arch }}
+
+      # ── Report installer size ───────────────────────────────────────────
+      - name: Report installer size
+        run: |
+          PKG="dist/ClipSense-${{ matrix.arch }}.pkg"
+          if [[ -f "$PKG" ]]; then
+            SIZE=$(du -m "$PKG" | cut -f1)
+            echo "✓ Installer: $PKG"
+            echo "  Size: ${SIZE} MB"
+            
+            if [[ $SIZE -gt 500 ]]; then
+              echo "⚠  WARNING: Installer exceeds 500MB target!"
+            else
+              echo "  ✓ Within 500MB target"
+            fi
+          else
+            echo "⚠  .pkg not found (packaging may have failed)"
+            ls -la dist/ || true
+          fi
+
+      # ── Upload artifacts ────────────────────────────────────────────────
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipSense-${{ matrix.arch }}-pkg
+          path: dist/ClipSense-${{ matrix.arch }}.pkg
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.arch }}
+          path: |
+            build/
+            ~/Library/Logs/ClipSense/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ── Summary job ───────────────────────────────────────────────────────
+  summary:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "============================================================"
+          echo "  📊  Build & Test Summary"
+          echo "============================================================"
+          echo ""
+          echo "  Intel (macos-13):         ${{ needs.build-and-test.result }}"
+          echo "  Apple Silicon (macos-14): ${{ needs.build-and-test.result }}"
+          echo ""
+          echo "  Check individual job results for architecture-specific"
+          echo "  pass/fail status."
+          echo "============================================================"

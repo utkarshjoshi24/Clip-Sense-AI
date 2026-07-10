@@ -2,5 +2,5 @@ librosa>=0.10
 scipy
 numpy
 scenedetect[opencv]
-openai-whisper
+faster-whisper>=1.0.0
 tabulate

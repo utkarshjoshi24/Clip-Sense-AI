@@ -1,7 +1,7 @@
 """
 transcribe.py — Stage 3: Speech-to-text transcription and lexical signal.
 
-Uses OpenAI's Whisper (local, offline) to transcribe audio, then computes
+Uses faster-whisper (CTranslate2-based) to transcribe audio, then computes
 a lexical signal based on hook words, exclamations, and question phrasing.
 
 Public functions:
@@ -13,9 +13,10 @@ import json
 import re
 from pathlib import Path
 
-import whisper
+from faster_whisper import WhisperModel
 
 from . import config
+from .error_handler import ModelCorruptError, ClipSenseError, get_logger
 
 
 def transcribe_audio(
@@ -23,7 +24,7 @@ def transcribe_audio(
     cache_key: str,
     cache_dir: Path,
 ) -> list[dict]:
-    """Transcribe audio using Whisper and return timestamped segments.
+    """Transcribe audio using faster-whisper and return timestamped segments.
 
     This is typically the slowest stage in the pipeline, so results are
     cached aggressively to disk.
@@ -41,40 +42,105 @@ def transcribe_audio(
 
     # Check cache — this is the big one we really want to avoid re-running
     if cache_file.exists():
-        print("  ✓ Transcript found in cache, loading (skipping Whisper)...")
+        print("  ✓ Transcript found in cache, loading (skipping transcription)...")
         with open(cache_file, "r") as f:
             cached = json.load(f)
         return cached["segments"]
 
     model_name = config.WHISPER_MODEL
-    print(f"  ⏳ Loading Whisper model '{model_name}'...")
-    model = whisper.load_model(model_name)
+    compute_type = config.WHISPER_COMPUTE_TYPE
+    device = config.WHISPER_DEVICE
 
-    print(f"  ⏳ Transcribing audio (this may take a while on long videos)...")
-    result = model.transcribe(
-        str(audio_path),
-        verbose=False,   # suppress Whisper's own progress output
-        language=None,    # auto-detect language
-    )
+    print(f"  ⏳ Loading faster-whisper model '{model_name}' "
+          f"(compute_type={compute_type}, device={device})...")
 
-    # Extract segments
-    segments = []
-    for seg in result.get("segments", []):
-        segments.append({
-            "start": float(seg["start"]),
-            "end": float(seg["end"]),
-            "text": seg["text"].strip(),
-        })
+    # Load model with defensive error handling
+    try:
+        model = WhisperModel(
+            model_name,
+            device=device,
+            compute_type=compute_type,
+        )
+    except (FileNotFoundError, OSError) as e:
+        raise ModelCorruptError(
+            detail=f"Failed to load model '{model_name}': {e}",
+        )
+    except RuntimeError as e:
+        logger = get_logger()
+        logger.error("Transcription engine failed to initialize: %s", e, exc_info=True)
+        raise ClipSenseError(
+            user_message=(
+                f"\u274c Transcription engine failed to initialize.\n"
+                f"   Model: {model_name}, compute_type: {compute_type}\n"
+                f"   Error: {e}\n"
+                f"\n"
+                f"   Check the log file for details:\n"
+                f"   ~/Library/Logs/ClipSense/clipsense.log"
+            ),
+            technical_detail=f"WhisperModel RuntimeError: {e}",
+        )
+    except Exception as e:
+        logger = get_logger()
+        logger.error("Unexpected error loading model: %s", e, exc_info=True)
+        raise ClipSenseError(
+            user_message=(
+                f"\u274c Could not load the transcription model.\n"
+                f"   Error: {e}\n"
+                f"   Try reinstalling ClipSense or check the log file:\n"
+                f"   ~/Library/Logs/ClipSense/clipsense.log"
+            ),
+            technical_detail=f"Model load error: {e}",
+        )
+
+    print(f"  \u23f3 Transcribing audio (this may take a while on long videos)...")
+
+    # Transcribe with defensive error handling
+    try:
+        # faster-whisper returns (segments_iterator, info)
+        segments_iter, info = model.transcribe(
+            str(audio_path),
+            beam_size=5,
+            language=None,  # auto-detect language
+        )
+
+        detected_language = info.language
+
+        # Consume the iterator and convert to our standard dict format
+        segments = []
+        for seg in segments_iter:
+            segments.append({
+                "start": float(seg.start),
+                "end": float(seg.end),
+                "text": seg.text.strip(),
+            })
+    except Exception as e:
+        logger = get_logger()
+        logger.error("Transcription failed: %s", e, exc_info=True)
+        raise ClipSenseError(
+            user_message=(
+                f"\u274c Transcription failed while processing the audio.\n"
+                f"   Error: {e}\n"
+                f"   The audio file may be corrupted or in an unsupported format.\n"
+                f"   Check the log file for details:\n"
+                f"   ~/Library/Logs/ClipSense/clipsense.log"
+            ),
+            technical_detail=f"Transcription error: {e}",
+        )
+
+
+
 
     total_words = sum(len(s["text"].split()) for s in segments)
     duration = segments[-1]["end"] if segments else 0
     print(f"  ✓ Transcription complete: {len(segments)} segments, "
-          f"~{total_words} words, {duration:.0f}s of speech.")
+          f"~{total_words} words, {duration:.0f}s of speech. "
+          f"(detected language: {detected_language})")
 
     # Cache
     cache_data = {
         "model": model_name,
-        "language": result.get("language", "unknown"),
+        "compute_type": compute_type,
+        "language": detected_language or "unknown",
         "segments": segments,
     }
     with open(cache_file, "w") as f:

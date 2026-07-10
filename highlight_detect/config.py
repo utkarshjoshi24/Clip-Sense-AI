@@ -48,15 +48,23 @@ PEAK_DISTANCE = 10
 # ---------------------------------------------------------------------------
 
 # ContentDetector threshold — lower = more sensitive to scene changes
-SCENE_THRESHOLD = 15.0
+SCENE_THRESHOLD = 10.0
 
 # ---------------------------------------------------------------------------
-# Transcription (Stage 3)
+# Transcription (Stage 3) — faster-whisper (CTranslate2)
 # ---------------------------------------------------------------------------
 
-# Whisper model size: "tiny", "base", "small", "medium", "large"
-# Use "base" for fast iteration, bump to "small" once scoring is tuned
+# Model size: "tiny", "base", "small", "medium", "large-v3"
+# "base" is the default — good enough for hook-word detection, ~75MB model.
+# Bump to "small" (~250MB) for better accuracy if bundle size allows.
 WHISPER_MODEL = "base"
+
+# CTranslate2 compute type — "int8" for quantized (smaller, faster on CPU),
+# "float16" for GPU, "float32" for full precision CPU.
+WHISPER_COMPUTE_TYPE = "int8"
+
+# Device: "cpu" for plugin use (no GPU dependency), "cuda" if GPU available.
+WHISPER_DEVICE = "cpu"
 
 # ---------------------------------------------------------------------------
 # Scoring (Stage 4)
